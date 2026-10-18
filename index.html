@@ -208,6 +208,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .stats div{background:var(--surface);border:1px solid var(--line);padding:12px 8px;text-align:center}
 .stats b{display:block;font-family:var(--f-mono);font-size:20px;font-variant-numeric:tabular-nums}
 .stats small{color:var(--muted);font-size:12px}
+.nudge{display:block;width:100%;margin:12px 0 -4px;padding:10px 12px;border:1px dashed var(--line);color:var(--muted);font-size:13.5px;text-align:center}
+.authbox{display:grid;gap:14px;background:var(--surface);border:1px solid var(--line);padding:16px}
+.authbox .btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.authbox .btn{font-size:16px;padding:12px 8px}
+.msg{font-size:13.5px;color:var(--muted);min-height:1em}
+.msg.err{color:var(--danger)}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;scroll-behavior:auto!important}}
 @media (min-width:600px){.tgrid{grid-template-columns:repeat(5,1fr)}}
 </style>
@@ -217,6 +223,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 <div id="app" aria-live="polite"></div>
 <div id="layer"></div>
 
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
 <script>
 (() => {
 "use strict";
@@ -312,16 +320,16 @@ const Store = {
     b = clone(b); b.kind = "bean"; b.updatedAt = Date.now();
     const i = state.beans.findIndex(x => x.id === b.id);
     if (i >= 0) state.beans[i] = b; else state.beans.push(b);
-    writeLocal();
+    writeLocal(); Cloud.touch(b.id);
     this.write(b.id, () => this.col.doc(b.id).set(b));
     return b;
   },
   deleteBean(id){
-    state.beans = state.beans.filter(x => x.id !== id); writeLocal();
+    state.beans = state.beans.filter(x => x.id !== id); writeLocal(); Cloud.touch(id);
     this.write(id, () => this.col.doc(id).delete());
   },
   saveSettings(){
-    writeLocal(); applyLook();
+    writeLocal(); applyLook(); Cloud.touch("settings");
     this.write("settings", () => this.col.doc("settings").set(clone(state.settings)));
   },
   async init(){
@@ -331,7 +339,7 @@ const Store = {
     let db = null, user = null;
     try { if (window.claude && claude.use) [db, user] = await Promise.all([claude.use("db"), claude.use("user")]); } catch {}
     const id = user ? await user.id().catch(() => null) : null;
-    if (!db || !id) { state.storage = "local"; softRender(); return; }
+    if (!db || !id) { Cloud.init(); return; }
     this.col = db.collection("data/users/" + id);
     let settled = false;
     this.col.onSnapshot(snap => {
@@ -406,6 +414,7 @@ function vHome(){
     <button role="tab" data-act="mode" data-mode="espresso" class="${state.mode==="espresso"?"on":""}" aria-selected="${state.mode==="espresso"}">Espresso</button>
     <button role="tab" data-act="mode" data-mode="pour" class="${state.mode==="pour"?"on":""}" aria-selected="${state.mode==="pour"}">Pour over</button>
   </div>
+  ${Cloud.status === "signedout" ? '<button class="nudge" data-act="go" data-to="settings">Sign in to back up your beans and sync them ›</button>' : ""}
   <p class="kicker">Your coffee beans${list.length ? ` · ${list.length} ${list.length === 1 ? "bag" : "bags"}` : ""}</p>
   ${list.length ? `
     <div class="rail" id="rail">${list.map(b => `<div class="rail-item" role="button" tabindex="0" data-act="open" data-id="${esc(b.id)}" aria-label="Open ${esc(b.name||"beans")}">${cardHTML(b)}</div>`).join("")}</div>
@@ -546,8 +555,8 @@ function vSettings(){
   <div class="seg">${[["auto","Auto"],["light","Light"],["dark","Dark"]].map(([k, n]) => `<button data-act="look" data-v="${k}" class="${s.look===k?"on":""}">${n}</button>`).join("")}</div>
   <div class="set-h">Your shelf</div>
   <div class="stats"><div><b>${all.length}</b><small>Bags</small></div><div><b>${all.filter(b => !b.finished).length}</b><small>Open</small></div><div><b>${logs}</b><small>Brews logged</small></div></div>
-  <div class="set-h">Storage</div>
-  <div class="status ${st[0]}"><i></i><span>${st[1]}</span></div>
+  <div class="set-h">Account & sync</div>
+  ${cloudHTML()}
   <div class="rows" style="margin-top:10px">
     <button class="row" data-act="export"><span>Export backup<br><small>Saves a .json file with every bag and brew</small></span><span>›</span></button>
     <label class="row" for="import-file" style="cursor:pointer"><span>Import backup<br><small>Adds bags from a Dial-In .json file</small></span><span>›</span></label>
@@ -740,6 +749,151 @@ async function getSaver(){
     return {status:"saved"};
   }};
 }
+
+/* ================= Supabase cloud sync ================= */
+const ago = t => { const s = Math.round((Date.now() - t) / 1000); return s < 10 ? "just now" : s < 60 ? s + "s ago" : s < 3600 ? Math.round(s/60) + " min ago" : Math.round(s/3600) + " h ago"; };
+const Cloud = {
+  sb:null, user:null, status:"off", msg:"", lastSync:0, dirty:new Set(), busy:false, again:false, timer:null, rt:null, chan:null,
+  lsGet(k){ try { return localStorage.getItem(k); } catch { return null; } },
+  lsSet(k, v){ try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} },
+  saveDirty(){ this.lsSet("dialin.dirty", JSON.stringify([...this.dirty])); },
+  async init(){
+    const cfg = window.DIALIN_CONFIG || {};
+    if (!cfg.supabaseUrl || !cfg.supabaseKey || !window.supabase) { this.status = "off"; state.storage = "local"; softRender(); return; }
+    try { this.dirty = new Set(JSON.parse(this.lsGet("dialin.dirty") || "[]")); } catch {}
+    this.sb = supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, {auth:{persistSession:true, autoRefreshToken:true}});
+    const { data } = await this.sb.auth.getSession();
+    this.setUser(data && data.session ? data.session.user : null);
+    this.sb.auth.onAuthStateChange((_e, session) => {
+      const u = session ? session.user : null;
+      if ((u && u.id) !== (this.user && this.user.id)) this.setUser(u);
+    });
+    addEventListener("online", () => this.sync());
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) this.sync(); });
+  },
+  setUser(u){
+    this.user = u;
+    if (!u) { this.unsub(); this.status = "signedout"; state.storage = "local"; softRender(); return; }
+    if (this.lsGet("dialin.syncUser") !== u.id) {          // first sign-in on this phone: upload what's here
+      state.beans.forEach(b => this.dirty.add(b.id)); this.dirty.add("settings"); this.saveDirty();
+      this.lsSet("dialin.syncUser", u.id);
+    }
+    this.status = "syncing"; softRender();
+    this.subscribe(); this.sync();
+  },
+  touch(id){
+    if (!this.sb) return;
+    this.dirty.add(id); this.saveDirty();
+    if (!this.user) return;
+    clearTimeout(this.timer); this.timer = setTimeout(() => this.sync(), 700);
+  },
+  async sync(){
+    if (!this.sb || !this.user) return;
+    if (this.busy) { this.again = true; return; }
+    this.busy = true; this.setStatus("syncing");
+    const uid = this.user.id;
+    try {
+      for (const id of [...this.dirty]) {
+        let res;
+        if (id === "settings") res = await this.sb.from("settings").upsert({user_id:uid, data:state.settings, updated_at:new Date().toISOString()});
+        else {
+          const b = state.beans.find(x => x.id === id);
+          res = b ? await this.sb.from("beans").upsert({id, user_id:uid, data:b, updated_at:new Date(b.updatedAt || Date.now()).toISOString()}, {onConflict:"user_id,id"})
+                  : await this.sb.from("beans").delete().eq("id", id);
+        }
+        if (res.error) throw res.error;
+        this.dirty.delete(id); this.saveDirty();
+      }
+      const [beansRes, setRes] = await Promise.all([this.sb.from("beans").select("id,data"), this.sb.from("settings").select("data").maybeSingle()]);
+      if (beansRes.error) throw beansRes.error;
+      if (setRes.error) throw setRes.error;
+      const remote = new Map(beansRes.data.map(r => [r.id, r.data]));
+      const merged = [];
+      state.beans.forEach(b => {
+        if (this.dirty.has(b.id)) merged.push(b);
+        else if (remote.has(b.id)) { const r = remote.get(b.id); merged.push((r.updatedAt || 0) >= (b.updatedAt || 0) ? r : b); }
+        // otherwise it was removed on another device
+      });
+      remote.forEach((r, id) => { if (!merged.some(b => b.id === id)) merged.push(r); });
+      state.beans = merged;
+      if (setRes.data && setRes.data.data && !this.dirty.has("settings")) state.settings = {...DEFAULT_SETTINGS, ...setRes.data.data};
+      writeLocal(); applyLook();
+      this.lastSync = Date.now(); this.setStatus("synced"); softRender();
+    } catch (err) {
+      this.setStatus(navigator.onLine === false ? "offline" : "error", err && err.message);
+    } finally {
+      this.busy = false;
+      if (this.again) { this.again = false; this.sync(); }
+    }
+  },
+  subscribe(){
+    this.unsub();
+    this.chan = this.sb.channel("beans-" + this.user.id)
+      .on("postgres_changes", {event:"*", schema:"public", table:"beans", filter:"user_id=eq." + this.user.id}, () => { clearTimeout(this.rt); this.rt = setTimeout(() => this.sync(), 600); })
+      .subscribe();
+  },
+  unsub(){ if (this.chan) { this.sb.removeChannel(this.chan); this.chan = null; } },
+  setStatus(s, m){
+    this.status = s; this.msg = m || "";
+    if (s === "synced" || s === "syncing") state.storage = "cloud";
+    const el = document.getElementById("sync-status"); if (el) el.outerHTML = statusHTML();
+  },
+};
+function statusHTML(){
+  const c = Cloud, map = {
+    synced: ["ok", `Synced to your account · ${ago(c.lastSync)}`],
+    syncing: ["", "Syncing…"],
+    offline: ["", "Offline. Changes are saved on this phone and will sync when you're back online."],
+    error: ["", `Couldn't sync${c.msg ? ": " + c.msg : ""}. Changes are kept on this phone.`],
+  }[c.status] || ["", "Connecting…"];
+  return `<div class="status ${map[0]}" id="sync-status"><i></i><span>${esc(map[1])}</span></div>`;
+}
+function cloudHTML(){
+  const c = Cloud;
+  if (c.status === "off") return `<div class="status"><i></i><span>Cloud sync isn't set up. Add your Supabase project URL and key to config.js. Until then, beans are saved on this phone only.</span></div>`;
+  if (!c.user) return `<p class="set-p">Sign in to back up your beans and see them on every device. Everything already on this phone gets uploaded.</p>
+    <div class="authbox">
+      <div class="field"><label for="c-email"><span>Email</span></label><div class="inrow"><input id="c-email" type="email" autocomplete="email" autocapitalize="off" placeholder="you@example.com"></div></div>
+      <div class="field"><label for="c-pass"><span>Password</span></label><div class="inrow"><input id="c-pass" type="password" autocomplete="current-password" placeholder="At least 6 characters"></div></div>
+      <div class="btns"><button class="btn" data-act="c-signin">Sign in</button><button class="btn ghost" data-act="c-signup">Create account</button></div>
+      <div class="msg" id="c-msg" role="status"></div>
+    </div>`;
+  return `${statusHTML()}
+    <div class="rows" style="margin-top:8px">
+      <div class="row"><span>Signed in<br><small>${esc(c.user.email || "")}</small></span></div>
+      <button class="row" data-act="c-sync"><span>Sync now</span><span>↻</span></button>
+      <button class="row" data-act="c-ask-signout"><span>Sign out</span><span>›</span></button>
+    </div>`;
+}
+function authMsg(t, err){ const m = document.getElementById("c-msg"); if (m) { m.textContent = t; m.classList.toggle("err", !!err); } }
+function authInputs(){
+  const email = (document.getElementById("c-email") || {}).value || "", pw = (document.getElementById("c-pass") || {}).value || "";
+  if (!email.trim() || pw.length < 6) { authMsg("Enter your email and a password of at least 6 characters.", true); return null; }
+  return {email: email.trim(), password: pw};
+}
+Object.assign(actions, {
+  async "c-signin"(){
+    const v = authInputs(); if (!v) return; authMsg("Signing in…");
+    const { error } = await Cloud.sb.auth.signInWithPassword(v);
+    if (error) authMsg(error.message.includes("confirm") ? "Confirm your email first: open the link Supabase sent you, then sign in here." : error.message, true);
+  },
+  async "c-signup"(){
+    const v = authInputs(); if (!v) return; authMsg("Creating your account…");
+    const { data, error } = await Cloud.sb.auth.signUp(v);
+    if (error) return authMsg(error.message, true);
+    if (!data.session) authMsg("Account created. Open the confirmation email, then come back and tap Sign in.");
+  },
+  "c-sync"(){ Cloud.sync(); },
+  "c-ask-signout"(){ state.overlay = {type:"confirm", title:"Sign out?", text:"Your beans stay safe in your account. They'll be removed from this phone until you sign in again.", ok:"Sign out", act:"c-signout"}; render(); },
+  async "c-signout"(){
+    state.overlay = null;
+    await Cloud.sync();
+    if (Cloud.dirty.size) { toast("Some changes haven't synced yet. Try again when you're online."); render(); return; }
+    await Cloud.sb.auth.signOut();
+    state.beans = []; Cloud.lsSet("dialin.syncUser", null); Cloud.dirty.clear(); Cloud.saveDirty(); writeLocal();
+    render(); toast("Signed out");
+  },
+});
 /* ================= share image (canvas) ================= */
 const FONT_SPEC = {condensed:['900', '"Big Shoulders Display", "Arial Narrow", sans-serif', true], serif:['400', '"DM Serif Display", Georgia, serif', false], mono:['600', '"IBM Plex Mono", monospace', true], script:['400', 'Yellowtail, cursive', false]};
 function wrap(ctx, text, maxW, maxLines){
