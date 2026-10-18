@@ -176,7 +176,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 /* ---------- sheets, dialogs, toast ---------- */
 .scrim{position:fixed;inset:0;z-index:20;background:var(--scrim);display:flex;align-items:flex-end;justify-content:center;animation:fade .18s ease}
-.sheet{width:100%;max-width:480px;background:var(--bg);padding:18px max(16px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:grid;gap:10px;animation:up .22s ease}
+.sheet{width:100%;max-width:480px;background:var(--bg);padding:18px max(16px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:grid;gap:10px;animation:up .22s ease;max-height:92vh;overflow-y:auto}
 .sheet h3{margin:0 0 4px;text-align:center;font-family:var(--f-display);font-weight:800;font-size:22px;text-transform:uppercase}
 .sheet p{margin:0 0 6px;text-align:center;color:var(--muted)}
 .sheet img{display:block;width:100%;max-width:320px;margin:0 auto;border:1px solid var(--line)}
@@ -400,6 +400,7 @@ function cardHTML(b, opt = {}){
 const bar = (l, title, r) => `<header class="bar"><div class="l">${l||""}</div><h1>${esc(title)}</h1><div class="r">${r||""}</div></header>`;
 const iconBtn = (act, ic, label, extra = "") => `<button class="icon" data-act="${act}" aria-label="${label}" ${extra}>${IC[ic]}</button>`;
 const getBean = id => state.beans.find(b => b.id === id);
+const otherMode = b => (b.mode || "pour") === "pour" ? "espresso" : "pour";
 function beansFor(mode){
   return state.beans.filter(b => (b.mode || "pour") === mode)
     .sort((a, b) => (a.finished ? 1 : 0) - (b.finished ? 1 : 0) || (b.createdAt || 0) - (a.createdAt || 0));
@@ -490,6 +491,7 @@ function vBeanForm(){
   return bar(iconBtn("go", "back", "Back to look", 'data-to="bean-theme"'), editing ? "Edit beans" : "Add beans", "") + `
   <div class="preview-sticky"><div class="preview" id="preview">${cardHTML(d, {placeholder:true})}</div></div>
   <div class="fields">
+    ${editing ? "" : `<div class="field"><span class="glabel">Brewing style</span><div class="seg">${[["espresso","Espresso"],["pour","Pour over"]].map(([k, n]) => `<button data-act="bmode" data-v="${k}" class="${(d.mode||"pour")===k?"on":""}">${n}</button>`).join("")}</div></div>`}
     ${textField("name", "Coffee name", "e.g. Kalledevarapura Estate", L.name, d.name)}
     ${textField("brand", "Roaster / brand", "e.g. Hermanos Coffee", L.brand, d.brand)}
     ${textField("origin", "Where was it grown?", "e.g. Huila, Colombia", L.origin, d.origin)}
@@ -571,6 +573,8 @@ function vOverlay(){
     const b = getBean(state.params.id);
     return `<div class="scrim" data-act="dismiss"><div class="sheet" role="dialog" aria-label="Bean options">
       <button class="btn" data-act="edit-bean">Edit bean info</button>
+      ${b ? `<button class="btn" data-act="copy-mode">Also add to ${MODE_WORD[otherMode(b)][2]}</button>
+      <button class="btn ghost" data-act="ask-move">Move to ${MODE_WORD[otherMode(b)][2]}</button>` : ""}
       <button class="btn" data-act="share">Share card image</button>
       <button class="btn ghost" data-act="finish">${b && b.finished ? "Move back to open bags" : "Mark bag as finished"}</button>
       <button class="btn danger" data-act="ask-remove">Remove beans</button>
@@ -578,7 +582,7 @@ function vOverlay(){
   }
   if (o.type === "confirm") return `<div class="scrim center" data-act="dismiss"><div class="sheet" role="alertdialog" aria-label="Confirm">
       <h3>${esc(o.title)}</h3><p>${esc(o.text)}</p>
-      <button class="btn danger" data-act="${o.act}">${esc(o.ok)}</button><button class="btn ghost" data-act="dismiss-btn">Cancel</button></div></div>`;
+      <button class="btn ${o.cls ?? "danger"}" data-act="${o.act}">${esc(o.ok)}</button><button class="btn ghost" data-act="dismiss-btn">Cancel</button></div></div>`;
   if (o.type === "share") return `<div class="scrim center" data-act="dismiss"><div class="sheet" role="dialog" aria-label="Share card">
       <h3>Share these beans</h3>
       ${o.src ? `<img src="${o.src}" alt="Card image for ${esc(o.name)}">` : `<p>Drawing your card…</p>`}
@@ -681,8 +685,28 @@ const actions = {
     if (!editing) { b.id = newId(); b.createdAt = Date.now(); }
     else { const cur = getBean(b.id); if (cur) { b.logs = cur.logs || []; b.rating = cur.rating || 0; b.finished = !!cur.finished; } }
     Store.saveBean(b); state.draft = null;
+    if (!editing) { state.mode = b.mode || "pour"; writeLocal(); }
     if (editing) { go("detail", {id: b.id, editing:false}); toast("Changes saved"); }
     else { go("added", {id: b.id}); confetti(b); }
+  },
+  bmode(el){ state.draft.mode = el.dataset.v; document.querySelectorAll('[data-act="bmode"]').forEach(x => x.classList.toggle("on", x.dataset.v === state.draft.mode)); previewRefresh(); },
+  "copy-mode"(){
+    const b = getBean(state.params.id), om = otherMode(b), label = MODE_WORD[om][2], key = v => (v || "").trim().toLowerCase();
+    state.overlay = null;
+    const dup = state.beans.find(x => (x.mode || "pour") === om && key(x.name) === key(b.name) && key(x.brand) === key(b.brand) && (x.roastDate || "") === (b.roastDate || ""));
+    if (dup) { render(); toast(`Already on your ${label} shelf`); return; }
+    const c = clone(b); c.id = newId(); c.mode = om; c.logs = []; c.rating = 0; c.finished = false; c.createdAt = Date.now();
+    Store.saveBean(c); render(); toast(`Added to ${label}`);
+  },
+  "ask-move"(){
+    const b = getBean(state.params.id), label = MODE_WORD[otherMode(b)][2];
+    state.overlay = {type:"confirm", title:`Move to ${label}?`, text:"This bag leaves its current shelf. Logged brews come along; details that only fit the other style, like water or yield, are kept but hidden.", ok:"Move", act:"move-mode", cls:""};
+    render();
+  },
+  "move-mode"(){
+    const b = clone(getBean(state.params.id)), om = otherMode(b);
+    b.mode = om; Store.saveBean(b); state.mode = om; writeLocal();
+    go("detail", {id:b.id}); toast(`Moved to ${MODE_WORD[om][2]}`);
   },
   "rate-bean"(el){ const b = clone(getBean(state.params.id)); const v = +el.dataset.v; b.rating = b.rating === v ? 0 : v; Store.saveBean(b); render(); },
   "rate-log"(el){ const v = +el.dataset.v; state.logDraft.rating = state.logDraft.rating === v ? 0 : v;
