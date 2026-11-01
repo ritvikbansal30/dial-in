@@ -5,6 +5,8 @@
 const ROASTS = ["Light", "Medium-light", "Medium", "Medium-dark", "Dark"];
 const MIMES = ["image/jpeg", "image/png", "image/webp"];
 const TIMEOUT = Number(process.env.SCAN_TIMEOUT_MS) || 40000; // give up on Google after this long
+const RETRY_MS = process.env.SCAN_RETRY_MS === undefined ? 800 : Number(process.env.SCAN_RETRY_MS);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const MAX_B64 = 4 * 1024 * 1024; // Vercel rejects request bodies over about 4.5 MB
 
 const PROMPT = `These are one or more photos of the same bag or label of coffee beans (front, back, sides). Read all the printed text across them and return these fields, combining what each photo shows.
@@ -72,8 +74,11 @@ module.exports = async function handler(req, res) {
   if (!imgs.length) return res.status(400).json({ error: "bad_request" });
   if (imgs.reduce((n, x) => n + x.data.length, 0) > MAX_B64) return res.status(413).json({ error: "too_big" });
 
-  const model = process.env.GEMINI_MODEL || "gemini-flash-latest";
-  const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent";
+  // Start with the light model: reading a label is easy and it is faster, with more free quota.
+  const primary = process.env.GEMINI_MODEL || "gemini-flash-lite-latest";
+  const fallback = process.env.GEMINI_FALLBACK_MODEL || "gemini-flash-latest";
+  const models = fallback && fallback !== primary ? [primary, fallback] : [primary];
+  const urlFor = (m) => "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(m) + ":generateContent";
   const parts = [{ text: PROMPT }].concat(imgs.map((x) => ({ inline_data: { mime_type: x.mime, data: x.data } })));
   const payload = (thinking) =>
     JSON.stringify({
@@ -88,16 +93,44 @@ module.exports = async function handler(req, res) {
   const attempts = [{ thinkingBudget: 0 }, { thinkingLevel: "minimal" }, null];
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), TIMEOUT);
-  let r;
-  try {
+  const callModel = async (m) => {
+    let resp;
     for (const t of attempts) {
-      r = await fetch(url, {
+      resp = await fetch(urlFor(m), {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
         body: payload(t),
         signal: ctl.signal,
       });
-      if (r.status !== 400) break;
+      if (resp.status !== 400) break;
+    }
+    return resp;
+  };
+  // Google answers 503 when a model is overloaded and 429 when a model's free quota is used up.
+  // Retry a busy model once, then try the lighter fallback model (it has its own capacity and quota).
+  const busy = (c) => c === 500 || c === 502 || c === 503 || c === 504;
+  const readFields = async (resp) => {
+    const j = await resp.json().catch(() => ({}));
+    const op = j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts;
+    const text = Array.isArray(op) ? op.map((p) => p.text || "").join("") : "";
+    try { return clean(JSON.parse(text)); } catch (e) { return clean({}); }
+  };
+  const score = (f) => ["name", "brand", "origin", "flavour"].filter((k) => f[k]).length;
+  let r = null, firstFail = null, best = null;
+  try {
+    outer: for (const m of models) {
+      for (let n = 0; n < 2; n++) {
+        r = await callModel(m);
+        if (r.ok) {
+          const got = await readFields(r);
+          if (!best || score(got) > score(best)) best = got;
+          if (score(best) >= 2) break outer; // read enough
+          break; // read very little: let the stronger model take a look too
+        }
+        if (!firstFail) firstFail = { status: r.status, detail: (await r.text().catch(() => "")).slice(0, 200) };
+        if (r.status === 429 || !busy(r.status)) break;
+        if (n === 0) await sleep(RETRY_MS);
+      }
     }
   } catch (e) {
     clearTimeout(timer);
@@ -105,14 +138,8 @@ module.exports = async function handler(req, res) {
     return res.status(aborted ? 504 : 502).json({ error: aborted ? "timeout" : "upstream_unreachable" });
   }
   clearTimeout(timer);
-  if (!r.ok) {
-    const detail = (await r.text().catch(() => "")).slice(0, 200);
-    return res.status(r.status === 429 ? 429 : 502).json({ error: r.status === 429 ? "quota" : "upstream", status: r.status, detail });
-  }
-  const j = await r.json().catch(() => ({}));
-  const outParts = j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts;
-  const text = Array.isArray(outParts) ? outParts.map((p) => p.text || "").join("") : "";
-  let fields = {};
-  try { fields = JSON.parse(text); } catch (e) { fields = {}; }
-  return res.status(200).json({ fields: clean(fields) });
+  if (best) return res.status(200).json({ fields: best });
+  const f = firstFail || { status: 0, detail: "" };
+  const code = f.status === 429 ? "quota" : busy(f.status) ? "busy" : "upstream";
+  return res.status(f.status === 429 ? 429 : 502).json({ error: code, status: f.status, detail: f.detail });
 };

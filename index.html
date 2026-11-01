@@ -970,6 +970,7 @@ function scanError(e){
   const c = e && e.code;
   if (c === "unauthorized") return "Please sign in again, then retry.";
   if (c === "timeout") return "That took too long. Try one photo, or check your connection.";
+  if (c === "busy") return "Google's scan service is busy right now. Try again in a moment.";
   if (c === "quota") return "The free scan limit was reached. Try again in a minute.";
   if (c === "not_configured") return "Photo scan isn't set up on the server yet.";
   if (c === "badimage") return "Couldn't open that photo. Try another one.";
