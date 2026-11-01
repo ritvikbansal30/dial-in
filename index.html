@@ -954,7 +954,7 @@ function scanHTML(){
                        : "Sign in from Settings to use photo scan.");
   return `<div class="field scanbox"><button class="btn ghost" data-act="scan" ${Scan.busy || !ok ? "disabled" : ""}>${Scan.busy ? "Reading label…" : "Scan photos of the bag"}</button><input type="file" id="scan-file" accept="image/*" multiple hidden><div class="hint" role="status">${esc(note)}</div></div>`;
 }
-async function shrinkImage(file, max = 1400){
+async function shrinkImage(file, max = 1200){
   let bmp;
   try { bmp = await createImageBitmap(file); } catch { throw {code:"badimage"}; }
   const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
@@ -962,13 +962,14 @@ async function shrinkImage(file, max = 1400){
   cv.width = Math.max(1, Math.round(bmp.width * k)); cv.height = Math.max(1, Math.round(bmp.height * k));
   cv.getContext("2d").drawImage(bmp, 0, 0, cv.width, cv.height);
   if (bmp.close) bmp.close();
-  const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.85));
+  const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.78));
   if (!blob) throw {code:"badimage"};
   return blob;
 }
 function scanError(e){
   const c = e && e.code;
   if (c === "unauthorized") return "Please sign in again, then retry.";
+  if (c === "timeout") return "That took too long. Try one photo, or check your connection.";
   if (c === "quota") return "The free scan limit was reached. Try again in a minute.";
   if (c === "not_configured") return "Photo scan isn't set up on the server yet.";
   if (c === "badimage") return "Couldn't open that photo. Try another one.";
@@ -982,13 +983,15 @@ const Scan = {
   async run(files){
     files = [...(files || [])];
     if (!files.length || this.busy || !state.draft) return;
-    const d = state.draft, extra = files.length > 4;
+    const d = state.draft, extra = files.length > 4, t0 = Date.now();
     files = files.slice(0, 4);
     this.busy = true; this.note = ""; refreshForm();
+    const tick = setInterval(() => { const h = document.querySelector(".scanbox .hint"); if (h) h.textContent = `Reading the label… ${Math.round((Date.now() - t0) / 1000)}s`; }, 1000);
     const toB64 = blob => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = no; r.readAsDataURL(blob); });
+    const ctl = new AbortController(); let timer = null;
     try {
       let images = [];
-      for (const dim of [files.length === 1 ? 1400 : files.length === 2 ? 1300 : 1100, 800, 600]) {
+      for (const dim of [files.length === 1 ? 1200 : files.length === 2 ? 1100 : 1000, 800, 600]) {
         const blobs = await Promise.all(files.map(f => shrinkImage(f, dim)));
         images = await Promise.all(blobs.map(toB64));
         if (images.reduce((n, x) => n + x.length, 0) < 3900000) break;
@@ -996,12 +999,14 @@ const Scan = {
       const { data } = await Cloud.sb.auth.getSession();
       const token = data && data.session ? data.session.access_token : null;
       if (!token) throw {code:"unauthorized"};
-      const res = await fetch("/api/scan", {method:"POST", headers:{"Content-Type":"application/json", Authorization:"Bearer " + token}, body:JSON.stringify({images:images.map(x => ({data:x, mime:"image/jpeg"}))})});
+      timer = setTimeout(() => ctl.abort(), 45000);
+      const res = await fetch("/api/scan", {method:"POST", signal:ctl.signal, headers:{"Content-Type":"application/json", Authorization:"Bearer " + token}, body:JSON.stringify({images:images.map(x => ({data:x, mime:"image/jpeg"}))})});
       if (res.status === 404) throw {code:"not_configured"};
       let out = {}; try { out = await res.json(); } catch {}
       if (!res.ok) throw {code: out.error || "failed", status: out.status};
-      this.note = (extra ? "Used the first 4 photos. " : "") + this.apply(d, out.fields || {});
-    } catch (e) { this.note = scanError(e); }
+      this.note = (extra ? "Used the first 4 photos. " : "") + this.apply(d, out.fields || {}) + ` (${Math.round((Date.now() - t0) / 1000)}s)`;
+    } catch (e) { this.note = scanError(e && e.name === "AbortError" ? {code:"timeout"} : e); }
+    clearTimeout(timer); clearInterval(tick);
     this.busy = false; refreshForm();
   },
   apply(d, f){

@@ -4,6 +4,7 @@
 
 const ROASTS = ["Light", "Medium-light", "Medium", "Medium-dark", "Dark"];
 const MIMES = ["image/jpeg", "image/png", "image/webp"];
+const TIMEOUT = Number(process.env.SCAN_TIMEOUT_MS) || 40000; // give up on Google after this long
 const MAX_B64 = 4 * 1024 * 1024; // Vercel rejects request bodies over about 4.5 MB
 
 const PROMPT = `These are one or more photos of the same bag or label of coffee beans (front, back, sides). Read all the printed text across them and return these fields, combining what each photo shows.
@@ -72,26 +73,45 @@ module.exports = async function handler(req, res) {
   if (imgs.reduce((n, x) => n + x.data.length, 0) > MAX_B64) return res.status(413).json({ error: "too_big" });
 
   const model = process.env.GEMINI_MODEL || "gemini-flash-latest";
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent";
+  const parts = [{ text: PROMPT }].concat(imgs.map((x) => ({ inline_data: { mime_type: x.mime, data: x.data } })));
+  const payload = (thinking) =>
+    JSON.stringify({
+      contents: [{ role: "user", parts }],
+      generationConfig: Object.assign(
+        { responseMimeType: "application/json", responseSchema: SCHEMA, temperature: 0 },
+        thinking ? { thinkingConfig: thinking } : {}
+      ),
+    });
+  // Reading a label doesn't need long "thinking", which is what makes it slow. Models differ in how
+  // they switch it off, so try the known ways and fall back to the plain request if all are refused.
+  const attempts = [{ thinkingBudget: 0 }, { thinkingLevel: "minimal" }, null];
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), TIMEOUT);
   let r;
   try {
-    r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: PROMPT }].concat(imgs.map((x) => ({ inline_data: { mime_type: x.mime, data: x.data } }))) }],
-        generationConfig: { responseMimeType: "application/json", responseSchema: SCHEMA, temperature: 0 },
-      }),
-    });
+    for (const t of attempts) {
+      r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
+        body: payload(t),
+        signal: ctl.signal,
+      });
+      if (r.status !== 400) break;
+    }
   } catch (e) {
-    return res.status(502).json({ error: "upstream_unreachable" });
+    clearTimeout(timer);
+    const aborted = e && e.name === "AbortError";
+    return res.status(aborted ? 504 : 502).json({ error: aborted ? "timeout" : "upstream_unreachable" });
   }
+  clearTimeout(timer);
   if (!r.ok) {
     const detail = (await r.text().catch(() => "")).slice(0, 200);
     return res.status(r.status === 429 ? 429 : 502).json({ error: r.status === 429 ? "quota" : "upstream", status: r.status, detail });
   }
   const j = await r.json().catch(() => ({}));
-  const parts = j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts;
-  const text = Array.isArray(parts) ? parts.map((p) => p.text || "").join("") : "";
+  const outParts = j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts;
+  const text = Array.isArray(outParts) ? outParts.map((p) => p.text || "").join("") : "";
   let fields = {};
   try { fields = JSON.parse(text); } catch (e) { fields = {}; }
   return res.status(200).json({ fields: clean(fields) });

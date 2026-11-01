@@ -1,4 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "crons": [{ "path": "/api/keepalive", "schedule": "0 3 * * *" }]
+  "crons": [{ "path": "/api/keepalive", "schedule": "0 3 * * *" }],
+  "functions": { "api/scan.js": { "maxDuration": 60 } }
 }
