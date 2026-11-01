@@ -214,6 +214,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .authbox .btn{font-size:16px;padding:12px 8px}
 .msg{font-size:13.5px;color:var(--muted);min-height:1em}
 .msg.err{color:var(--danger)}
+.scanbox{display:grid;gap:8px}
+.scanbox .btn{font-size:17px;padding:13px 12px}
 .tag{flex:0 0 auto;font-style:normal;font-family:var(--f-mono);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--line);padding:2px 6px;color:var(--muted);white-space:nowrap}
 .tag.iced{border-color:var(--accent);color:var(--accent)}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;scroll-behavior:auto!important}}
@@ -503,6 +505,7 @@ function vBeanForm(){
   return bar(iconBtn("go", "back", "Back to look", 'data-to="bean-theme"'), editing ? "Edit beans" : "Add beans", "") + `
   <div class="preview-sticky"><div class="preview" id="preview">${cardHTML(d, {placeholder:true})}</div></div>
   <div class="fields">
+    ${scanHTML()}
     ${editing ? "" : `<div class="field"><span class="glabel">Brewing style</span><div class="seg">${[["espresso","Espresso"],["pour","Pour over"]].map(([k, n]) => `<button data-act="bmode" data-v="${k}" class="${(d.mode||"pour")===k?"on":""}">${n}</button>`).join("")}</div></div>`}
     ${textField("name", "Coffee name", "e.g. Kalledevarapura Estate", L.name, d.name)}
     ${textField("brand", "Roaster / brand", "e.g. Hermanos Coffee", L.brand, d.brand)}
@@ -943,6 +946,81 @@ Object.assign(actions, {
     render(); toast("Signed out");
   },
 });
+/* ================= photo scan (reads the bag label via /api/scan) ================= */
+function scanHTML(){
+  const ok = !!(Cloud.user && Cloud.sb);
+  const note = Scan.busy ? "Reading the label. This takes a few seconds."
+    : Scan.note || (ok ? "Take or pick one or more photos of the bag (front and back work best) and the details fill in. Check them afterwards, it can make mistakes."
+                       : "Sign in from Settings to use photo scan.");
+  return `<div class="field scanbox"><button class="btn ghost" data-act="scan" ${Scan.busy || !ok ? "disabled" : ""}>${Scan.busy ? "Reading label…" : "Scan photos of the bag"}</button><input type="file" id="scan-file" accept="image/*" multiple hidden><div class="hint" role="status">${esc(note)}</div></div>`;
+}
+async function shrinkImage(file, max = 1400){
+  let bmp;
+  try { bmp = await createImageBitmap(file); } catch { throw {code:"badimage"}; }
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement("canvas");
+  cv.width = Math.max(1, Math.round(bmp.width * k)); cv.height = Math.max(1, Math.round(bmp.height * k));
+  cv.getContext("2d").drawImage(bmp, 0, 0, cv.width, cv.height);
+  if (bmp.close) bmp.close();
+  const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.85));
+  if (!blob) throw {code:"badimage"};
+  return blob;
+}
+function scanError(e){
+  const c = e && e.code;
+  if (c === "unauthorized") return "Please sign in again, then retry.";
+  if (c === "quota") return "The free scan limit was reached. Try again in a minute.";
+  if (c === "not_configured") return "Photo scan isn't set up on the server yet.";
+  if (c === "badimage") return "Couldn't open that photo. Try another one.";
+  if (c === "too_big") return "Those photos are too large. Try fewer or smaller ones.";
+  if (c === "upstream") return `The scan service returned an error (${e.status || "?"}).`;
+  return "Couldn't scan that photo. Check your connection and try again.";
+}
+function refreshForm(){ if (state.screen !== "bean-form") return; const y = window.scrollY; render(); window.scrollTo(0, y); }
+const Scan = {
+  busy:false, note:"",
+  async run(files){
+    files = [...(files || [])];
+    if (!files.length || this.busy || !state.draft) return;
+    const d = state.draft, extra = files.length > 4;
+    files = files.slice(0, 4);
+    this.busy = true; this.note = ""; refreshForm();
+    const toB64 = blob => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = no; r.readAsDataURL(blob); });
+    try {
+      let images = [];
+      for (const dim of [files.length === 1 ? 1400 : files.length === 2 ? 1300 : 1100, 800, 600]) {
+        const blobs = await Promise.all(files.map(f => shrinkImage(f, dim)));
+        images = await Promise.all(blobs.map(toB64));
+        if (images.reduce((n, x) => n + x.length, 0) < 3900000) break;
+      }
+      const { data } = await Cloud.sb.auth.getSession();
+      const token = data && data.session ? data.session.access_token : null;
+      if (!token) throw {code:"unauthorized"};
+      const res = await fetch("/api/scan", {method:"POST", headers:{"Content-Type":"application/json", Authorization:"Bearer " + token}, body:JSON.stringify({images:images.map(x => ({data:x, mime:"image/jpeg"}))})});
+      if (res.status === 404) throw {code:"not_configured"};
+      let out = {}; try { out = await res.json(); } catch {}
+      if (!res.ok) throw {code: out.error || "failed", status: out.status};
+      this.note = (extra ? "Used the first 4 photos. " : "") + this.apply(d, out.fields || {});
+    } catch (e) { this.note = scanError(e); }
+    this.busy = false; refreshForm();
+  },
+  apply(d, f){
+    let n = 0;
+    const put = (k, v, max) => { v = String(v == null ? "" : v).trim(); if (!v || (d[k] || "").trim()) return; d[k] = v.slice(0, max); n++; };
+    put("name", f.name, L.name); put("brand", f.brand, L.brand); put("origin", f.origin, L.origin);
+    put("flavour", f.flavour, L.flavour); put("process", f.process, L.process);
+    const roast = ROASTS.find(r => r.toLowerCase() === String(f.roast || "").trim().toLowerCase());
+    if (roast && !d.roast) { d.roast = roast; n++; }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(f.roastDate || "") && f.roastDate <= today() && !d.roastDate) { d.roastDate = f.roastDate; n++; }
+    const g = String(f.grams == null ? "" : f.grams).replace(/\D/g, "").slice(0, L.grams);
+    if (g && !d.grams) { d.grams = g; n++; }
+    return n ? `Filled in ${n} ${n === 1 ? "field" : "fields"}. Check them, the scan can make mistakes. Scan another photo to fill any blanks.`
+             : Object.values(f).some(v => String(v == null ? "" : v).trim()) ? "Nothing new to add. Everything it could read is already filled in."
+             : "Couldn't read much from that. Try a closer, well-lit shot of the label.";
+  },
+};
+Object.assign(actions, { scan(){ const i = document.getElementById("scan-file"); if (i) i.click(); } });
+
 /* ================= share image (canvas) ================= */
 const FONT_SPEC = {condensed:['900', '"Big Shoulders Display", "Arial Narrow", sans-serif', true], serif:['400', '"DM Serif Display", Georgia, serif', false], mono:['600', '"IBM Plex Mono", monospace', true], script:['400', 'Yellowtail, cursive', false]};
 function wrap(ctx, text, maxW, maxLines){
@@ -1049,6 +1127,7 @@ document.addEventListener("change", e => {
     const m = +document.getElementById("f-min").value, s = +document.getElementById("f-sec").value;
     state.logDraft.time = m * 60 + s; return;
   }
+  if (el.id === "scan-file" && el.files && el.files[0]) { const fl = [...el.files]; el.value = ""; Scan.run(fl); return; }
   if (el.id === "import-file" && el.files && el.files[0]) {
     const f = el.files[0], r = new FileReader();
     r.onload = () => {
