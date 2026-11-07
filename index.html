@@ -503,6 +503,8 @@ function vDetail(){
   <div class="rate"><span>Coffee rating</span>${starsInput("rate-bean", b.rating)}</div>
   <button class="nudge solid" data-act="open-recipes" data-id="${esc(b.id)}">Recipe ideas for these beans ›</button>
   <button class="nudge solid" style="margin-top:8px" data-act="which-method" ${Rec.mbusy ? "disabled" : ""}>${Rec.mbusy ? "Searching the web…" : "Which brew method suits these beans? ›"}</button>
+  ${(b.logs || []).length ? `<button class="nudge solid" style="margin-top:8px" data-act="improve-logs" ${Rec.ibusy ? "disabled" : ""}>${Rec.ibusy ? "Comparing with the web…" : "Improve from my brews ›"}</button>` : ""}
+  ${Rec.inote && Rec.ifor === b.id ? `<div class="hint" role="status">${esc(Rec.inote)}</div>` : ""}
   ${methodCard(b)}
   <div class="sec-h">${w[1][0].toUpperCase()+w[1].slice(1)} <small>${logs.length ? "Newest first" : ""}</small></div>
   <div class="logs">${logs.length ? logs.map(({g, i}) => `
@@ -970,8 +972,8 @@ function vRecipe(){
   ${r.research || (r.sources && r.sources.length) ? `<div class="sec-h">What the research said</div>${r.research ? `<p class="why" style="color:var(--ink)">${esc(r.research)}</p>` : ""}${r.sources && r.sources.length ? `<p class="why">Drew on: ${esc(r.sources.map(x => x.title).join(", "))}</p>` : ""}` : ""}
   ${r.note ? `<div class="sec-h">Note</div><p class="why" style="color:var(--ink)">${esc(r.note)}</p>` : ""}
   ${saved ? `<button class="delete-link" data-act="del-rec">Delete this recipe</button>` : `<button class="delete-link" style="color:var(--ink)" data-act="save-rec">Save to my recipes</button>`}
-  <div style="height:150px"></div>
-  <div class="dock"><div class="dock-in"><button class="btn" data-act="start-timer">Start step timer</button>${b ? `<button class="btn ghost" data-act="log-rec">Log this brew</button>` : ""}</div></div>`;
+  <div style="height:260px"></div>
+  <div class="dock"><div class="dock-in"><button class="btn" data-act="start-timer">Start step timer</button><button class="btn ghost" data-act="improve-rec" ${Rec.ibusy ? "disabled" : ""}>${Rec.ibusy ? "Comparing with the web…" : "Make it better"}</button>${Rec.inote && Rec.ifor === r.id ? `<div class="hint" role="status" style="margin:0;text-align:center">${esc(Rec.inote)}</div>` : ""}${b ? `<button class="btn ghost" data-act="log-rec">Log this brew</button>` : ""}</div></div>`;
 }
 
 const Tm = {
@@ -1080,6 +1082,44 @@ Object.assign(Rec, {
   },
 });
 Object.assign(actions, { "which-method"(){ Rec.askMethod(); } });
+
+Object.assign(Rec, {
+  ibusy:false, inote:"", ifor:null,
+  async improve(mode, bean, base, forId){
+    if (this.ibusy) return;
+    this.ifor = forId; this.inote = "";
+    if (!(Cloud.user && Cloud.sb)) { this.inote = "Sign in from Settings to use this."; render(); return; }
+    this.ibusy = true; render();
+    const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 32000);
+    try {
+      const { data } = await Cloud.sb.auth.getSession(); const token = data && data.session ? data.session.access_token : null;
+      if (!token) throw {code:"unauthorized"};
+      const res = await fetch("/api/recipe", {method:"POST", signal:ctl.signal, headers:{"Content-Type":"application/json", Authorization:"Bearer " + token}, body:JSON.stringify({action:"improve", mode, bean, base})});
+      let out = {}; try { out = await res.json(); } catch {}
+      if (res.status === 404) throw {code:"not_configured"};
+      if (!res.ok) throw {code: out.error || "failed", status: out.status};
+      const r = (out.recipes || []).find(x => x && x.name && Array.isArray(x.steps) && x.steps.length);
+      if (!r) throw {code:"failed"};
+      state.cur = {...r, id:newId(), source:"ai", name: /better|improved/i.test(r.name) ? r.name : r.name + " (improved)"};
+      this.ibusy = false; this.inote = ""; go("recipe"); return;
+    } catch (e) { this.inote = scanError(e && e.name === "AbortError" ? {code:"timeout"} : e).replace("scan service", "recipe service").replace(/photos?/, "input"); }
+    clearTimeout(timer); this.ibusy = false; if (["detail","recipe"].includes(state.screen)) { const y = scrollY; render(); scrollTo(0, y); }
+  },
+});
+const beanInfo = b => b ? {name:b.name, brand:b.brand, origin:b.origin, flavour:b.flavour, roast:b.roast, process:b.process} : {};
+Object.assign(actions, {
+  "improve-logs"(){
+    const b = getBean(state.params.id); if (!b) return;
+    const logs = (b.logs || []).slice(-3).map(g => ({dose:g.dose, water:g.water, yield:g.yield, grind:g.grind, tempC:g.tempC, time:g.time, steep:g.steep, press:g.press, orient:g.orient, filter:g.filter, method:g.method, grinder:g.grinder, serve:g.serve, drink:g.drink, rating:g.rating, notes:g.comments}));
+    Rec.improve(b.mode || "pour", beanInfo(b), {lastBrews:logs}, b.id);
+  },
+  "improve-rec"(){
+    const r = state.cur, b = state.params.id ? getBean(state.params.id) : null; if (!r) return;
+    const base = {recipe:{name:r.name, dose:r.dose, water:r.water, yield:r.yield, tempC:r.tempC, grind:r.grind, orient:r.orient, filter:r.filter, steps:r.steps}};
+    if (b && (b.mode || "pour") === r.mode) base.lastBrews = (b.logs || []).slice(-3).map(g => ({dose:g.dose, water:g.water, yield:g.yield, grind:g.grind, tempC:g.tempC, rating:g.rating, notes:g.comments}));
+    Rec.improve(r.mode, beanInfo(b), base, r.id);
+  },
+});
 
 /* ================= saving files outside Claude ================= */
 async function getSaver(){
