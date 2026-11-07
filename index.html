@@ -220,6 +220,40 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .tag.iced{border-color:var(--accent);color:var(--accent)}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;scroll-behavior:auto!important}}
 @media (min-width:600px){.tgrid{grid-template-columns:repeat(5,1fr)}}
+
+.nudge.solid{border-style:solid;color:var(--ink);font-weight:600;background:var(--surface);margin-top:14px}
+.rcp{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);padding:12px 14px;margin-bottom:8px}
+.rcp b{display:block;font-family:var(--f-display);font-weight:800;font-size:19px;text-transform:uppercase;letter-spacing:.03em;overflow-wrap:anywhere}
+.rcp span{display:block;font-family:var(--f-mono);font-size:12px;color:var(--muted);margin-top:3px}
+.rcp small{display:block;font-size:13px;color:var(--ink);margin-top:6px;line-height:1.35}
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.steps li{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:start;background:var(--surface);border:1px solid var(--line);padding:10px 12px;font-size:15px;line-height:1.35}
+.steps li i{font-style:normal;font-family:var(--f-display);font-weight:800;font-size:18px;color:var(--accent)}
+.steps li em{font-style:normal;font-family:var(--f-mono);font-size:12px;color:var(--muted);white-space:nowrap}
+.spec{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);background:var(--surface);margin:12px 0}
+.spec div{padding:9px 6px;text-align:center;border-right:1px solid var(--line);border-bottom:1px solid var(--line);min-width:0}
+.spec div:nth-child(3n){border-right:0}
+.spec strong{display:block;font-family:var(--f-mono);font-weight:600;font-size:14px;overflow-wrap:anywhere}
+.spec small{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.why{color:var(--muted);font-size:14px;margin:4px 0 0}
+.tm{text-align:center;padding:10px 0}
+.tm .now{font-family:var(--f-mono);font-weight:600;font-size:76px;line-height:1;font-variant-numeric:tabular-nums;margin:18px 0 6px}
+.tm .txt{font-size:21px;line-height:1.3;font-weight:600;margin:10px 4px 16px;overflow-wrap:anywhere}
+.tm .bar2{height:8px;background:var(--line);margin:0 4px}
+.tm .bar2 i{display:block;height:100%;width:0;background:var(--accent)}
+.tm .meta{display:flex;justify-content:space-between;color:var(--muted);font-family:var(--f-mono);font-size:13px;margin:8px 4px 16px}
+.tm .next{color:var(--muted);font-size:14px;margin:4px 6px 0}
+.tm .row3{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+.srcs{display:grid;gap:6px}.srcs a{color:var(--accent);font-size:14px;overflow-wrap:anywhere}
+.mth{background:var(--surface);border:1px solid var(--line);padding:12px 14px;margin-top:10px}
+.mth h3{margin:0 0 6px;font-family:var(--f-display);font-weight:800;font-size:18px;text-transform:uppercase;letter-spacing:.03em}
+.mth .m{display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding:8px 0;border-top:1px solid var(--line);font-size:14px;line-height:1.35}
+.mth .m b{font-family:var(--f-display);font-size:16px;text-transform:uppercase}
+.mth .m button{grid-row:1/3;grid-column:2;align-self:center;border:1.5px solid var(--ink);padding:6px 10px;font-family:var(--f-display);font-weight:700;text-transform:uppercase;font-size:14px}
+.mth .m span{color:var(--muted)}
+.impbox textarea{width:100%;border:1.5px solid var(--line);padding:10px;min-height:110px;background:transparent;color:inherit;font:inherit}
+.impbox .btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.impbox .btns .btn{font-size:16px;padding:12px 8px}
 </style>
 
 </head>
@@ -263,7 +297,10 @@ const ROASTS = ["Light","Medium-light","Medium","Medium-dark","Dark"];
 const PROCESSES = ["Washed","Natural","Honey","Anaerobic","Monsooned"];
 const METHODS = ["V60","Kalita Wave","Chemex","AeroPress","Origami","Hario Switch","Clever Dripper","French Press","Moka Pot","Cold Brew","Other"];
 const L = {name:40, brand:40, origin:40, flavour:60, process:30, grams:5, grinder:40, machine:40, grind:12, num:6, temp:5, comments:600};
-const MODE_WORD = {pour:["pour","pours","Pour over"], espresso:["shot","shots","Espresso"]};
+const MODE_WORD = {pour:["pour","pours","Pour over"], espresso:["shot","shots","Espresso"], aeropress:["brew","brews","AeroPress"]};
+const MODES = ["espresso","pour","aeropress"];
+const mw = b => MODE_WORD[(b && b.mode) || "pour"];
+const FILTERS = [["paper","Paper"],["metal","Metal"]], ORIENTS = [["standard","Standard"],["inverted","Inverted"]];
 const HOT_DRINKS = ["Espresso","Americano","Cappuccino","Flat white","Latte","Cortado","Macchiato","Mocha","Other"];
 const ICED_DRINKS = ["Iced americano","Iced latte","Iced cappuccino","Iced flat white","Iced mocha","Espresso tonic","Shakerato","Other"];
 function convertDrink(d, to){
@@ -318,7 +355,7 @@ const DEFAULT_SETTINGS = {tempUnit:"C", look:"auto"};
 const state = {
   mode:"pour", beans:[], settings:{...DEFAULT_SETTINGS},
   screen:"home", params:{}, draft:null, logDraft:null, overlay:null,
-  railIndex:{pour:0, espresso:0}, storage:"loading",
+  railIndex:{pour:0, espresso:0, aeropress:0}, storage:"loading",
 };
 const LS_KEY = "dialin.v1";
 function readLocal(){ try { return JSON.parse(localStorage.getItem(LS_KEY) || "null"); } catch { return null; } }
@@ -389,7 +426,7 @@ function cardHTML(b, opt = {}){
   const len = shown.length, nCls = len <= 10 ? "n-s" : len <= 20 ? "n-m" : len <= 28 ? "n-l" : "n-xl";
   const sub = [b.brand, b.origin].filter(Boolean).map(esc).join("<br>");
   const cnt = (b.logs || []).length;
-  const word = b.mode === "espresso" ? "Shots logged" : "Pours logged";
+  const word = b.mode === "espresso" ? "Shots logged" : b.mode === "aeropress" ? "Brews logged" : "Pours logged";
   const c = (v, ph) => v ? esc(v) : `<span class="ph">${ph}</span>`;
   return `<div class="bag f-${esc(b.labelFont||"condensed")}" style="${cardVars(t)}">
     <div class="bag-notes">${b.flavour ? esc(b.flavour) : '<span class="ph">Flavour notes</span>'}</div>
@@ -413,7 +450,7 @@ function cardHTML(b, opt = {}){
 const bar = (l, title, r) => `<header class="bar"><div class="l">${l||""}</div><h1>${esc(title)}</h1><div class="r">${r||""}</div></header>`;
 const iconBtn = (act, ic, label, extra = "") => `<button class="icon" data-act="${act}" aria-label="${label}" ${extra}>${IC[ic]}</button>`;
 const getBean = id => state.beans.find(b => b.id === id);
-const otherMode = b => (b.mode || "pour") === "pour" ? "espresso" : "pour";
+const otherModes = b => MODES.filter(m => m !== (b.mode || "pour"));
 function beansFor(mode){
   return state.beans.filter(b => (b.mode || "pour") === mode)
     .sort((a, b) => (a.finished ? 1 : 0) - (b.finished ? 1 : 0) || (b.createdAt || 0) - (a.createdAt || 0));
@@ -425,10 +462,10 @@ function vHome(){
   const sample = {name:"Ratnagiri Estate", brand:"Sample Roasters", origin:"Chikmagalur, India", flavour:"Peach, cocoa, jasmine", roast:"Medium", process:"Washed", roastDate:"2026-10-02", grams:"250", rating:4, theme:"harbour", mode:state.mode, logs:[{},{}]};
   return bar("", "Dial-In", iconBtn("go", "gear", "Settings", 'data-to="settings"')) + `
   <div class="seg" role="tablist">
-    <button role="tab" data-act="mode" data-mode="espresso" class="${state.mode==="espresso"?"on":""}" aria-selected="${state.mode==="espresso"}">Espresso</button>
-    <button role="tab" data-act="mode" data-mode="pour" class="${state.mode==="pour"?"on":""}" aria-selected="${state.mode==="pour"}">Pour over</button>
+    ${MODES.map(m => `<button role="tab" data-act="mode" data-mode="${m}" class="${state.mode===m?"on":""}" aria-selected="${state.mode===m}">${MODE_WORD[m][2]}</button>`).join("")}
   </div>
   ${Cloud.status === "signedout" ? '<button class="nudge" data-act="go" data-to="settings">Sign in to back up your beans and sync them ›</button>' : ""}
+  <button class="nudge solid" data-act="open-recipes">${MODE_WORD[state.mode][2]} recipes, ideas and timer ›</button>
   <p class="kicker">Your coffee beans${list.length ? ` · ${list.length} ${list.length === 1 ? "bag" : "bags"}` : ""}</p>
   ${list.length ? `
     <div class="rail" id="rail">${list.map(b => `<div class="rail-item" role="button" tabindex="0" data-act="open" data-id="${esc(b.id)}" aria-label="Open ${esc(b.name||"beans")}">${cardHTML(b)}</div>`).join("")}</div>
@@ -437,12 +474,21 @@ function vHome(){
   <div class="dock"><div class="dock-in"><button class="btn" data-act="add-beans">Add beans</button></div></div>`;
 }
 
-const serveTag = (b, g) => { if (!g.serve) return ""; const iced = g.serve === "iced"; const t = b.mode === "espresso" && g.drink ? g.drink : (iced ? "Iced" : "Hot"); return `<i class="tag${iced ? " iced" : ""}">${esc(t)}</i>`; };
+const serveTag = (b, g) => {
+  let out = "";
+  if (b.mode === "aeropress" && g.orient) out += `<i class="tag">${g.orient === "inverted" ? "Inverted" : "Standard"}</i>`;
+  if (!g.serve) return out;
+  const iced = g.serve === "iced"; const t = b.mode === "espresso" && g.drink ? g.drink : (iced ? "Iced" : "Hot");
+  return out + `<i class="tag${iced ? " iced" : ""}">${esc(t)}</i>`;
+};
 function logCells(b, g){
   const temp = tempTxt(g.tempC);
   if (b.mode === "espresso") return [
     [g.dose ? g.dose+" g" : "—","In"],[g.yield ? g.yield+" g" : "—","Out"],[ratioOf(g.dose,g.yield),"Ratio"],
     [timeTxt(g.time),"Time"],[g.grind||"—","Grind"],[temp,"Temp"]];
+  if (b.mode === "aeropress") return [
+    [g.dose ? g.dose+" g" : "—","Dose"],[g.water ? g.water+" g" : "—","Water"],[ratioOf(g.dose,g.water),"Ratio"],
+    [timeTxt(g.steep),"Steep"],[timeTxt(g.press),"Press"],[temp,"Temp"]];
   return [
     [g.dose ? g.dose+" g" : "—","Dose"],[g.water ? g.water+" g" : "—","Water"],[ratioOf(g.dose,g.water),"Ratio"],
     [timeTxt(g.time),"Time"],[g.grind||"—","Grind"],[temp,"Temp"]];
@@ -455,10 +501,13 @@ function vDetail(){
   return bar(iconBtn("go", "back", "Back", 'data-to="home"'), b.name || "Beans", iconBtn("menu", "more", "Bean options")) + `
   <div class="detail-card">${cardHTML(b)}</div>
   <div class="rate"><span>Coffee rating</span>${starsInput("rate-bean", b.rating)}</div>
+  <button class="nudge solid" data-act="open-recipes" data-id="${esc(b.id)}">Recipe ideas for these beans ›</button>
+  <button class="nudge solid" style="margin-top:8px" data-act="which-method" ${Rec.mbusy ? "disabled" : ""}>${Rec.mbusy ? "Searching the web…" : "Which brew method suits these beans? ›"}</button>
+  ${methodCard(b)}
   <div class="sec-h">${w[1][0].toUpperCase()+w[1].slice(1)} <small>${logs.length ? "Newest first" : ""}</small></div>
   <div class="logs">${logs.length ? logs.map(({g, i}) => `
     <button class="log" data-act="edit-log" data-i="${i}">
-      <div class="log-head"><b>${w[0]} ${i+1}</b>${serveTag(b, g)}<span>${esc([fmtLong(g.date), b.mode==="espresso" ? g.machine : g.method, g.grinder, g.serve === "iced" && g.ice ? g.ice + " g ice" : ""].filter(Boolean).join(" · "))}</span><em>${g.rating ? "★".repeat(g.rating) : "›"}</em></div>
+      <div class="log-head"><b>${w[0]} ${i+1}</b>${serveTag(b, g)}<span>${esc([fmtLong(g.date), b.mode==="espresso" ? g.machine : b.mode==="aeropress" ? [g.filter ? g.filter + " filter" : "", g.grind].filter(Boolean).join(", ") : g.method, g.grinder, g.serve === "iced" && g.ice ? g.ice + " g ice" : ""].filter(Boolean).join(" · "))}</span><em>${g.rating ? "★".repeat(g.rating) : "›"}</em></div>
       <div class="log-grid">${logCells(b, g).map(([v, k]) => `<div><strong>${esc(v)}</strong><small>${k}</small></div>`).join("")}</div>
       ${g.comments ? `<div class="log-note">${esc(g.comments)}</div>` : ""}
     </button>`).join("") : `<div class="none">No ${w[1]} logged yet. Log your first ${w[0]} to start dialing in this bag.</div>`}
@@ -506,7 +555,7 @@ function vBeanForm(){
   <div class="preview-sticky"><div class="preview" id="preview">${cardHTML(d, {placeholder:true})}</div></div>
   <div class="fields">
     ${scanHTML()}
-    ${editing ? "" : `<div class="field"><span class="glabel">Brewing style</span><div class="seg">${[["espresso","Espresso"],["pour","Pour over"]].map(([k, n]) => `<button data-act="bmode" data-v="${k}" class="${(d.mode||"pour")===k?"on":""}">${n}</button>`).join("")}</div></div>`}
+    ${editing ? "" : `<div class="field"><span class="glabel">Brewing style</span><div class="seg">${MODES.map(k => [k, MODE_WORD[k][2]]).map(([k, n]) => `<button data-act="bmode" data-v="${k}" class="${(d.mode||"pour")===k?"on":""}">${n}</button>`).join("")}</div></div>`}
     ${textField("name", "Coffee name", "e.g. Kalledevarapura Estate", L.name, d.name)}
     ${textField("brand", "Roaster / brand", "e.g. Hermanos Coffee", L.brand, d.brand)}
     ${textField("origin", "Where was it grown?", "e.g. Huila, Colombia", L.origin, d.origin)}
@@ -532,7 +581,7 @@ function vAdded(){
 
 function vLog(){
   const b = getBean(state.params.id); if (!b) { state.screen = "home"; return vHome(); }
-  const g = state.logDraft, esp = b.mode === "espresso", w = MODE_WORD[b.mode || "pour"], serve = g.serve || "hot";
+  const g = state.logDraft, esp = b.mode === "espresso", ap = b.mode === "aeropress", w = MODE_WORD[b.mode || "pour"], serve = g.serve || "hot";
   const editing = state.params.i != null;
   const mins = Math.floor((+g.time || 0) / 60), secs = (+g.time || 0) % 60;
   const opt = (n, sel, lab) => `<option value="${n}" ${n===sel?"selected":""}>${lab ?? n}</option>`;
@@ -544,6 +593,8 @@ function vLog(){
           : serve === "iced" ? textField("ice", "Ice (optional)", "e.g. 120", L.num, g.ice, {num:true, suf:"g"}) : ""}
     ${textField("grinder", "Grinder", "e.g. Comandante C40", L.grinder, g.grinder)}
     ${esp ? textField("machine", "Machine", "e.g. Gaggia Classic", L.machine, g.machine)
+          : ap ? `<div class="field"><span class="glabel">Method</span><div class="seg">${ORIENTS.map(([k, n]) => `<button data-act="setf" data-k="orient" data-v="${k}" class="${(g.orient||"standard")===k?"on":""}" aria-pressed="${(g.orient||"standard")===k}">${n}</button>`).join("")}</div></div>
+            <div class="field"><span class="glabel">Filter</span><div class="seg">${FILTERS.map(([k, n]) => `<button data-act="setf" data-k="filter" data-v="${k}" class="${(g.filter||"paper")===k?"on":""}" aria-pressed="${(g.filter||"paper")===k}">${n}</button>`).join("")}</div></div>`
           : `<div class="field"><label for="f-method"><span>Brew method</span></label><div class="inrow"><select id="f-method" data-f="method"><option value="">Select method</option>${METHODS.map(m => opt(m, g.method)).join("")}</select></div></div>`}
     ${textField("grind", "Grind setting", "e.g. 24 clicks", L.grind, g.grind)}
     <div class="two">
@@ -553,9 +604,11 @@ function vLog(){
     <div class="ratio"><span>Brew ratio</span><b id="ratio">${ratioOf(g.dose, esp ? g.yield : g.water)}</b></div>
     <div class="two">
       ${esp ? textField("time", "Shot time", "28", 3, g.time, {num:true, suf:"s"})
+            : ap ? textField("steep", "Steep time", "60", 3, g.steep, {num:true, suf:"s"})
             : `<div class="field"><label for="f-min"><span>Brew time</span></label><div class="inrow"><select id="f-min" data-time="m" aria-label="Minutes">${Array.from({length:31}, (_, i) => opt(i, mins, i+" min")).join("")}</select><select id="f-sec" data-time="s" aria-label="Seconds">${Array.from({length:60}, (_, i) => opt(i, secs, String(i).padStart(2,"0")+" s")).join("")}</select></div></div>`}
-      ${textField("temp", "Water temp", state.settings.tempUnit === "F" ? "200" : "93", L.temp, g.temp, {num:true, suf:"°"+state.settings.tempUnit})}
+      ${ap ? textField("press", "Press time", "30", 3, g.press, {num:true, suf:"s"}) : textField("temp", "Water temp", state.settings.tempUnit === "F" ? "200" : "93", L.temp, g.temp, {num:true, suf:"°"+state.settings.tempUnit})}
     </div>
+    ${ap ? `<div class="two">${textField("temp", "Water temp", state.settings.tempUnit === "F" ? "200" : "85", L.temp, g.temp, {num:true, suf:"°"+state.settings.tempUnit})}${textField("topup", "Top-up water", "optional", L.num, g.topup, {num:true, suf:"g"})}</div>` : ""}
     <div class="field"><label><span>How did it taste?</span></label>${starsInput("rate-log", g.rating, "sm")}</div>
     <div class="field"><label for="f-comments"><span>Notes</span><span class="cnt" data-cnt="comments">${(g.comments||"").length}/${L.comments}</span></label>
       <textarea id="f-comments" data-f="comments" maxlength="${L.comments}" placeholder="Sour? Bitter? What will you change next time?">${esc(g.comments||"")}</textarea></div>
@@ -591,16 +644,23 @@ function vOverlay(){
     const b = getBean(state.params.id);
     return `<div class="scrim" data-act="dismiss"><div class="sheet" role="dialog" aria-label="Bean options">
       <button class="btn" data-act="edit-bean">Edit bean info</button>
-      ${b ? `<button class="btn" data-act="copy-mode">Also add to ${MODE_WORD[otherMode(b)][2]}</button>
-      <button class="btn ghost" data-act="ask-move">Move to ${MODE_WORD[otherMode(b)][2]}</button>` : ""}
+      ${b ? `<button class="btn" data-act="pick-copy">Also add to another shelf…</button>
+      <button class="btn ghost" data-act="pick-move">Move to another shelf…</button>` : ""}
       <button class="btn" data-act="share">Share card image</button>
       <button class="btn ghost" data-act="finish">${b && b.finished ? "Move back to open bags" : "Mark bag as finished"}</button>
       <button class="btn danger" data-act="ask-remove">Remove beans</button>
       <button class="btn ghost" data-act="dismiss-btn">Cancel</button></div></div>`;
   }
+  if (o.type === "modepick") {
+    const b = getBean(state.params.id);
+    return `<div class="scrim" data-act="dismiss"><div class="sheet" role="dialog" aria-label="Choose shelf">
+      <h3>${o.kind === "move" ? "Move to which shelf?" : "Also add to which shelf?"}</h3>
+      ${b ? otherModes(b).map(m => `<button class="btn ${o.kind === "move" ? "ghost" : ""}" data-act="${o.kind === "move" ? "ask-move" : "copy-mode"}" data-v="${m}">${MODE_WORD[m][2]}</button>`).join("") : ""}
+      <button class="btn ghost" data-act="dismiss-btn">Cancel</button></div></div>`;
+  }
   if (o.type === "confirm") return `<div class="scrim center" data-act="dismiss"><div class="sheet" role="alertdialog" aria-label="Confirm">
       <h3>${esc(o.title)}</h3><p>${esc(o.text)}</p>
-      <button class="btn ${o.cls ?? "danger"}" data-act="${o.act}">${esc(o.ok)}</button><button class="btn ghost" data-act="dismiss-btn">Cancel</button></div></div>`;
+      <button class="btn ${o.cls ?? "danger"}" data-act="${o.act}" ${o.v ? `data-v="${esc(o.v)}"` : ""}>${esc(o.ok)}</button><button class="btn ghost" data-act="dismiss-btn">Cancel</button></div></div>`;
   if (o.type === "share") return `<div class="scrim center" data-act="dismiss"><div class="sheet" role="dialog" aria-label="Share card">
       <h3>Share these beans</h3>
       ${o.src ? `<img src="${o.src}" alt="Card image for ${esc(o.name)}">` : `<p>Drawing your card…</p>`}
@@ -610,7 +670,7 @@ function vOverlay(){
 }
 
 /* ================= render ================= */
-const VIEWS = {home:vHome, detail:vDetail, "bean-theme":vTheme, "bean-form":vBeanForm, added:vAdded, "log-form":vLog, settings:vSettings};
+const VIEWS = {recipes:vRecipes, recipe:vRecipe, timer:vTimer, home:vHome, detail:vDetail, "bean-theme":vTheme, "bean-form":vBeanForm, added:vAdded, "log-form":vLog, settings:vSettings};
 let lastScreen = null;
 function render(){
   const app = document.getElementById("app");
@@ -660,7 +720,7 @@ function confetti(b){
 }
 
 /* ================= flows ================= */
-function go(screen, params){ state.screen = screen; if (params) state.params = {...state.params, ...params}; state.overlay = null; render(); }
+function go(screen, params){ if (screen !== "timer") Tm.stop(); state.screen = screen; if (params) state.params = {...state.params, ...params}; state.overlay = null; render(); }
 function previewRefresh(){ const p = document.getElementById("preview"); if (p) p.innerHTML = cardHTML(state.draft, {placeholder:true}); }
 function lastLog(b){
   const own = (b.logs || [])[b.logs ? b.logs.length - 1 : 0];
@@ -668,10 +728,22 @@ function lastLog(b){
   const sameMode = state.beans.filter(x => (x.mode||"pour") === (b.mode||"pour")).flatMap(x => x.logs || []);
   return sameMode.sort((a, c) => (c.createdAt||0) - (a.createdAt||0))[0] || {};
 }
-function startLog(){
+function startLog(rec){
   const b = getBean(state.params.id), prev = lastLog(b);
   state.logDraft = {date: today(), grinder: prev.grinder || "", machine: prev.machine || "", method: prev.method || "", grind: prev.grind || "",
-    dose: prev.dose || "", water: prev.water || "", yield: prev.yield || "", time: prev.time ?? "", temp: toUnit(prev.tempC ?? null), serve: prev.serve || "hot", drink: prev.drink || "", ice: prev.ice || "", rating: 0, comments: ""};
+    dose: prev.dose || "", water: prev.water || "", yield: prev.yield || "", time: prev.time ?? "", temp: toUnit(prev.tempC ?? null), serve: prev.serve || "hot", drink: prev.drink || "", ice: prev.ice || "", rating: 0, comments: "",
+    orient: prev.orient || "standard", filter: prev.filter || "paper", steep: prev.steep ?? "", press: prev.press ?? "", topup: prev.topup || ""};
+  if (rec) {
+    const put = (k, v) => { if (v != null && v !== "") state.logDraft[k] = String(v); };
+    put("dose", rec.dose); put("grind", rec.grind);
+    if (b.mode === "espresso") put("yield", rec.yield); else put("water", rec.water);
+    if (rec.tempC) state.logDraft.temp = toUnit(rec.tempC);
+    if (b.mode === "aeropress") { if (rec.orient) state.logDraft.orient = rec.orient; if (rec.filter) state.logDraft.filter = rec.filter; }
+    if (b.mode === "pour" && rec.method && METHODS.includes(rec.method)) state.logDraft.method = rec.method;
+    const tm = rec.steps.filter(x => x.secs > 0).reduce((n, x) => n + x.secs, 0);
+    if (b.mode === "espresso" && rec.steps.length === 1 && tm) state.logDraft.time = tm;
+    state.logDraft.comments = "Recipe: " + rec.name;
+  }
   go("log-form", {i: null});
 }
 
@@ -708,21 +780,27 @@ const actions = {
     else { go("added", {id: b.id}); confetti(b); }
   },
   bmode(el){ state.draft.mode = el.dataset.v; document.querySelectorAll('[data-act="bmode"]').forEach(x => x.classList.toggle("on", x.dataset.v === state.draft.mode)); previewRefresh(); },
-  "copy-mode"(){
-    const b = getBean(state.params.id), om = otherMode(b), label = MODE_WORD[om][2], key = v => (v || "").trim().toLowerCase();
+  "pick-copy"(){ state.overlay = {type:"modepick", kind:"copy"}; render(); },
+  "pick-move"(){ state.overlay = {type:"modepick", kind:"move"}; render(); },
+  setf(el){
+    const g = state.logDraft; g[el.dataset.k] = el.dataset.v;
+    el.parentElement.querySelectorAll("button").forEach(x => { const on = x === el; x.classList.toggle("on", on); x.setAttribute("aria-pressed", on); });
+  },
+  "copy-mode"(el){
+    const b = getBean(state.params.id), om = el.dataset.v, label = MODE_WORD[om][2], key = v => (v || "").trim().toLowerCase();
     state.overlay = null;
     const dup = state.beans.find(x => (x.mode || "pour") === om && key(x.name) === key(b.name) && key(x.brand) === key(b.brand) && (x.roastDate || "") === (b.roastDate || ""));
     if (dup) { render(); toast(`Already on your ${label} shelf`); return; }
     const c = clone(b); c.id = newId(); c.mode = om; c.logs = []; c.rating = 0; c.finished = false; c.createdAt = Date.now();
     Store.saveBean(c); render(); toast(`Added to ${label}`);
   },
-  "ask-move"(){
-    const b = getBean(state.params.id), label = MODE_WORD[otherMode(b)][2];
-    state.overlay = {type:"confirm", title:`Move to ${label}?`, text:"This bag leaves its current shelf. Logged brews come along; details that only fit the other style, like water or yield, are kept but hidden.", ok:"Move", act:"move-mode", cls:""};
+  "ask-move"(el){
+    const om = el.dataset.v, label = MODE_WORD[om][2];
+    state.overlay = {type:"confirm", title:`Move to ${label}?`, text:"This bag leaves its current shelf. Logged brews come along; details that only fit the other style, like water or yield, are kept but hidden.", ok:"Move", act:"move-mode", cls:"", v:om};
     render();
   },
-  "move-mode"(){
-    const b = clone(getBean(state.params.id)), om = otherMode(b);
+  "move-mode"(el){
+    const b = clone(getBean(state.params.id)), om = el.dataset.v;
     b.mode = om; Store.saveBean(b); state.mode = om; writeLocal();
     go("detail", {id:b.id}); toast(`Moved to ${MODE_WORD[om][2]}`);
   },
@@ -747,6 +825,8 @@ const actions = {
     const b = clone(getBean(state.params.id)), g = clone(state.logDraft);
     g.tempC = fromUnit(g.temp); delete g.temp;
     g.serve = g.serve || "hot"; if (g.serve !== "iced" || b.mode === "espresso") delete g.ice; if (b.mode !== "espresso") delete g.drink;
+    if (b.mode !== "aeropress") { ["orient","filter","steep","press","topup"].forEach(k => delete g[k]); }
+    else { ["steep","press"].forEach(k => { if (g[k] === "" || g[k] == null) delete g[k]; else g[k] = +g[k] || 0; }); delete g.time; delete g.machine; delete g.method; }
     ["grinder","machine","grind","comments"].forEach(k => g[k] = (g[k]||"").trim());
     if (g.time !== "" && g.time != null) g.time = +g.time || 0;
     b.logs = b.logs || [];
@@ -784,6 +864,222 @@ const actions = {
     catch (e) { if (e && e.code !== "declined") toast("Couldn't save the backup here."); }
   },
 };
+
+
+/* ================= recipes (AI ideas, import from your book, step timer) ================= */
+const fmtClock = s => { s = Math.max(0, Math.ceil(s)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+function recSpec(r){
+  const t = r.tempC ? tempTxt(r.tempC) : "—";
+  const out = r.mode === "espresso" ? [[r.dose ? r.dose + " g" : "—","In"],[r.yield ? r.yield + " g" : "—","Out"],[ratioOf(r.dose, r.yield),"Ratio"]]
+    : [[r.dose ? r.dose + " g" : "—","Coffee"],[r.water ? r.water + " g" : "—","Water"],[ratioOf(r.dose, r.water),"Ratio"]];
+  out.push([t,"Temp"]);
+  if (r.mode === "aeropress") out.push([r.orient ? (r.orient === "inverted" ? "Inverted" : "Standard") : "—","Method"], [r.filter ? r.filter[0].toUpperCase() + r.filter.slice(1) : "—","Filter"]);
+  else out.push([r.method || "—","Method"], [r.grind || "—","Grind"]);
+  return out;
+}
+const recMeta = r => [r.dose && r.dose + " g", r.mode === "espresso" ? (r.yield && "→ " + r.yield + " g") : (r.water && r.water + " g water"), r.tempC && tempTxt(r.tempC), r.orient === "inverted" ? "inverted" : r.orient === "standard" ? "standard" : ""].filter(Boolean).join(" · ");
+const recCard = r => `<button class="rcp" data-act="open-rec" data-id="${esc(r.id)}"><b>${esc(r.name)}</b><span>${esc(recMeta(r))}${r.steps.length ? ` · ${r.steps.length} steps` : ""}</span>${r.why ? `<small>${esc(r.why)}</small>` : ""}</button>`;
+
+const Rec = {
+  busy:false, note:"", kind:"", list:[], imp:{text:""}, beanId:null,
+  saved(){ return Array.isArray(state.settings.recipes) ? state.settings.recipes : []; },
+  find(id){ return this.list.find(x => x.id === id) || this.saved().find(x => x.id === id); },
+  async run(action, files){
+    if (this.busy) return;
+    const mode = state.rmode, b = state.params.id ? getBean(state.params.id) : null;
+    const text = (this.imp.text || "").trim();
+    if (action === "import" && !text && !(files && files.length)) { this.note = "Paste some recipe text first, or add photos of the pages."; render(); return; }
+    this.busy = true; this.note = ""; this.kind = action; render();
+    const t0 = Date.now(), tick = setInterval(() => { const h = document.getElementById("rec-note"); if (h) h.textContent = (action === "import" ? "Reading your recipes… " : "Searching the web and writing recipes… ") + Math.round((Date.now() - t0) / 1000) + "s"; }, 1000);
+    const ctl = new AbortController(); let timer = null;
+    try {
+      const toB64 = blob => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = no; r.readAsDataURL(blob); });
+      const body = {action, mode};
+      if (action === "suggest") {
+        body.bean = b ? {name:b.name, brand:b.brand, origin:b.origin, flavour:b.flavour, roast:b.roast, process:b.process} : {};
+        body.library = this.saved().filter(r => r.mode === mode).slice(0, 12).map(r => ({name:r.name, dose:r.dose, water:r.water, orient:r.orient, note:r.note}));
+      } else {
+        body.text = text.slice(0, 8000);
+        let images = [];
+        const fl = (files || []).slice(0, 4);
+        for (const dim of [1200, 900, 700]) {
+          images = await Promise.all((await Promise.all(fl.map(f => shrinkImage(f, dim)))).map(toB64));
+          if (images.reduce((n, x) => n + x.length, 0) < 3900000) break;
+        }
+        body.images = images.map(x => ({data:x, mime:"image/jpeg"}));
+      }
+      const { data } = await Cloud.sb.auth.getSession();
+      const token = data && data.session ? data.session.access_token : null;
+      if (!token) throw {code:"unauthorized"};
+      timer = setTimeout(() => ctl.abort(), 32000);
+      const res = await fetch("/api/recipe", {method:"POST", signal:ctl.signal, headers:{"Content-Type":"application/json", Authorization:"Bearer " + token}, body:JSON.stringify(body)});
+      if (res.status === 404) throw {code:"not_configured"};
+      let out = {}; try { out = await res.json(); } catch {}
+      if (!res.ok) throw {code: out.error || "failed", status: out.status};
+      const got = (out.recipes || []).filter(r => r && r.name && Array.isArray(r.steps)).map(r => ({...r, id:newId(), source: action === "import" ? "book" : "ai"}));
+      this.list = got; this.beanId = b ? b.id : null; this.kindShown = action;
+      this.note = got.length ? (action === "import" ? "Check the amounts below before you save. Reading can make mistakes." : (out.searched ? "Based on what turned up in a web search (summary inside each recipe). Still starting points, so adjust to taste." : "Web search wasn't available, so these are general starting points. Adjust to taste."))
+                            : (action === "import" ? "Couldn't find a recipe in that. Try a clearer photo, or paste the text." : "Nothing came back. Try again.");
+    } catch (e) { this.note = scanError(e && e.name === "AbortError" ? {code:"timeout"} : e).replace("scan service", "recipe service").replace(/photos?/, "input"); }
+    clearTimeout(timer); clearInterval(tick);
+    this.busy = false; if (state.screen === "recipes") { const y = scrollY; render(); scrollTo(0, y); }
+  },
+  save(r){
+    const list = this.saved();
+    if (list.some(x => x.id === r.id)) return false;
+    const c = clone(r); delete c.why; if (r.why) c.note = c.note || r.why;
+    state.settings.recipes = [c].concat(list).slice(0, 60); Store.saveSettings(); return true;
+  },
+  remove(id){ state.settings.recipes = this.saved().filter(x => x.id !== id); Store.saveSettings(); },
+};
+
+function vRecipes(){
+  const b = state.params.id ? getBean(state.params.id) : null, mode = state.rmode = state.params.rm || (b ? b.mode || "pour" : (state.rmode || state.mode));
+  const ok = !!(Cloud.user && Cloud.sb);
+  const saved = Rec.saved().filter(r => r.mode === mode);
+  const shown = Rec.list.filter(r => r.mode === mode);
+  const seg = b ? "" : `<div class="seg" style="margin-top:10px">${MODES.map(m => `<button data-act="rmode" data-v="${m}" class="${mode===m?"on":""}">${MODE_WORD[m][2]}</button>`).join("")}</div>`;
+  const note = Rec.busy ? (Rec.kind === "import" ? "Reading your recipes…" : "Searching the web and writing recipes… about 30 seconds at most.") : Rec.note;
+  return bar(iconBtn("go", "back", "Back", `data-to="${b ? "detail" : "home"}"`), "Recipes", "") + seg + `
+  <div class="lead"><h2>${b ? esc(b.name || "These beans") : MODE_WORD[mode][2] + " recipe book"}</h2><p>${b ? MODE_WORD[mode][2] + " · ideas picked for this roast, process and flavour" : "Saved recipes, ideas and a step timer"}</p></div>
+  <button class="btn" style="margin-top:14px" data-act="suggest" ${Rec.busy || !ok ? "disabled" : ""}>${Rec.busy && Rec.kind === "suggest" ? "Thinking…" : b ? "Suggest recipes for this bean" : "Suggest " + MODE_WORD[mode][2] + " recipes"}</button>
+  <div class="hint" id="rec-note" role="status">${esc(!ok ? "Sign in from Settings to get AI recipe ideas. Saved recipes and the timer work without it." : note)}</div>
+  ${shown.length ? `<div class="sec-h">${Rec.kindShown === "import" ? "Read from your book" : "Ideas"} <small>${shown.length > 1 && Rec.kindShown === "import" ? `<a href="#" data-act="save-all" style="color:var(--accent)">Save all</a>` : ""}</small></div>${shown.map(recCard).join("")}` : ""}
+  <div class="sec-h">Saved <small>${saved.length ? saved.length + (saved.length === 1 ? " recipe" : " recipes") : ""}</small></div>
+  ${saved.length ? saved.map(recCard).join("") : `<div class="none">No saved ${MODE_WORD[mode][2]} recipes yet. Save an idea, or add one from your recipe book below.</div>`}
+  <div class="sec-h">Add from your recipe book</div>
+  <div class="impbox">
+    <textarea data-r="text" maxlength="8000" placeholder="Paste a recipe here, or add photos of the pages." aria-label="Recipe text">${esc(Rec.imp.text)}</textarea>
+    <div class="btns"><button class="btn ghost" data-act="imp-text" ${Rec.busy || !ok ? "disabled" : ""}>Read text</button><button class="btn ghost" data-act="imp-photo" ${Rec.busy || !ok ? "disabled" : ""}>Add photos</button></div>
+    <input type="file" id="rec-file" accept="image/*" multiple hidden>
+    <div class="hint">Up to 4 photos. Your own book or notes only, nothing is posted anywhere.</div>
+  </div>
+  <div style="height:30px"></div>`;
+}
+
+function vRecipe(){
+  const r = state.cur; if (!r) { state.screen = "home"; return vHome(); }
+  const b0 = state.params.id ? getBean(state.params.id) : null, b = b0 && (b0.mode || "pour") === r.mode ? b0 : null, saved = Rec.saved().some(x => x.id === r.id);
+  const total = r.steps.reduce((n, x) => n + (x.secs || 0), 0);
+  return bar(iconBtn("go", "back", "Back", 'data-to="recipes"'), "Recipe", "") + `
+  <div class="lead"><h2>${esc(r.name)}</h2><p>${MODE_WORD[r.mode][2]}</p></div>
+  ${r.why ? `<p class="why">${esc(r.why)}</p>` : ""}
+  <div class="spec">${recSpec(r).map(([v, k]) => `<div><strong>${esc(v)}</strong><small>${k}</small></div>`).join("")}</div>
+  <div class="sec-h">Steps <small>${total ? "about " + fmtClock(total) : "no timings"}</small></div>
+  <ol class="steps">${r.steps.map((x, i) => `<li><i>${i + 1}</i><span>${esc(x.text)}</span><em>${x.secs ? fmtClock(x.secs) : ""}</em></li>`).join("")}</ol>
+  ${r.research || (r.sources && r.sources.length) ? `<div class="sec-h">What the research said</div>${r.research ? `<p class="why" style="color:var(--ink)">${esc(r.research)}</p>` : ""}${r.sources && r.sources.length ? `<p class="why">Drew on: ${esc(r.sources.map(x => x.title).join(", "))}</p>` : ""}` : ""}
+  ${r.note ? `<div class="sec-h">Note</div><p class="why" style="color:var(--ink)">${esc(r.note)}</p>` : ""}
+  ${saved ? `<button class="delete-link" data-act="del-rec">Delete this recipe</button>` : `<button class="delete-link" style="color:var(--ink)" data-act="save-rec">Save to my recipes</button>`}
+  <div style="height:150px"></div>
+  <div class="dock"><div class="dock-in"><button class="btn" data-act="start-timer">Start step timer</button>${b ? `<button class="btn ghost" data-act="log-rec">Log this brew</button>` : ""}</div></div>`;
+}
+
+const Tm = {
+  h:null, last:0, lock:null,
+  start(rec){ state.timer = {rec, i:0, left: rec.steps[0].secs || 0, running:false, done:false, elapsed:0}; go("timer"); },
+  async play(){
+    const t = state.timer; if (!t || t.done) return;
+    t.running = true; this.last = Date.now(); if (!this.h) this.h = setInterval(() => this.tick(), 200);
+    try { if (navigator.wakeLock) this.lock = await navigator.wakeLock.request("screen"); } catch {}
+    this.chime(true); render();
+  },
+  pause(){ const t = state.timer; if (t) t.running = false; try { if (this.lock) this.lock.release(); } catch {} this.lock = null; render(); },
+  stop(){ clearInterval(this.h); this.h = null; try { if (this.lock) this.lock.release(); } catch {} this.lock = null; },
+  chime(soft){
+    try { navigator.vibrate && navigator.vibrate(soft ? 40 : [120, 60, 120]); } catch {}
+    try {
+      const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
+      this.ac = this.ac || new C(); const o = this.ac.createOscillator(), g = this.ac.createGain();
+      o.frequency.value = soft ? 660 : 880; g.gain.value = .08; o.connect(g); g.connect(this.ac.destination); o.start(); o.stop(this.ac.currentTime + (soft ? .08 : .22));
+    } catch {}
+  },
+  tick(){
+    const t = state.timer; if (!t || !t.running || state.screen !== "timer") return;
+    const now = Date.now(), dt = Math.min(1, (now - this.last) / 1000); this.last = now; t.elapsed += dt;
+    const s = t.rec.steps[t.i];
+    if (s.secs > 0) { t.left -= dt; if (t.left <= 0) { this.next(); return; } }
+    this.paint();
+  },
+  next(){
+    const t = state.timer; if (!t) return;
+    if (t.i >= t.rec.steps.length - 1) { t.done = true; t.running = false; this.stop(); this.chime(); render(); return; }
+    t.i++; t.left = t.rec.steps[t.i].secs || 0; this.chime(); render();
+  },
+  prev(){ const t = state.timer; if (!t || t.i === 0) return; t.i--; t.left = t.rec.steps[t.i].secs || 0; t.done = false; render(); },
+  paint(){
+    const t = state.timer, s = t.rec.steps[t.i];
+    const a = document.getElementById("tm-left"), b = document.getElementById("tm-bar"), c = document.getElementById("tm-total");
+    if (a) a.textContent = s.secs ? fmtClock(t.left) : "Go";
+    if (b) b.style.width = s.secs ? Math.min(100, (1 - t.left / s.secs) * 100) + "%" : "0%";
+    if (c) c.textContent = fmtClock(t.elapsed);
+  },
+};
+function vTimer(){
+  const t = state.timer; if (!t) { state.screen = "home"; return vHome(); }
+  const r = t.rec, s = r.steps[t.i], nxt = r.steps[t.i + 1], b0 = state.params.id ? getBean(state.params.id) : null, b = b0 && (b0.mode || "pour") === r.mode ? b0 : null;
+  if (t.done) return bar(iconBtn("go", "close", "Close", 'data-to="recipe"'), "Done", "") + `
+    <div class="tm"><div class="now" style="font-size:54px">${fmtClock(t.elapsed)}</div><div class="txt">${esc(r.name)} is ready. Taste it, then write down what you would change.</div></div>
+    <div class="dock"><div class="dock-in">${b ? `<button class="btn" data-act="log-rec">Log this brew</button>` : ""}<button class="btn ${b ? "ghost" : ""}" data-act="tm-reset">Start over</button></div></div>`;
+  return bar(iconBtn("go", "close", "Close timer", 'data-to="recipe"'), "Timer", "") + `
+  <div class="tm">
+    <div class="next" style="margin:0 0 12px">${esc(r.name)}</div>
+    <div class="meta"><span>Step ${t.i + 1} of ${r.steps.length}</span><span>Total <b id="tm-total">${fmtClock(t.elapsed)}</b></span></div>
+    <div class="bar2"><i id="tm-bar" style="width:${s.secs ? Math.min(100, (1 - t.left / s.secs) * 100) : 0}%"></i></div>
+    <div class="now" id="tm-left">${s.secs ? fmtClock(t.left) : "Go"}</div>
+    <div class="txt">${esc(s.text)}</div>
+    <div class="next">${nxt ? "Next: " + esc(nxt.text) + (nxt.secs ? " (" + fmtClock(nxt.secs) + ")" : "") : "Last step"}</div>
+    <div class="row3"><button class="btn ghost" data-act="tm-prev" ${t.i ? "" : "disabled"}>Back</button><button class="btn ghost" data-act="tm-next">${t.i >= r.steps.length - 1 ? "Finish" : "Next"}</button></div>
+  </div>
+  <div class="dock"><div class="dock-in"><button class="btn" data-act="tm-toggle">${t.running ? "Pause" : t.elapsed ? "Resume" : "Start"}</button></div></div>`;
+}
+Object.assign(actions, {
+  "open-recipes"(el){ Rec.imp = {text:""}; Rec.list = []; Rec.note = ""; go("recipes", {id: el.dataset.id || null, rm: el.dataset.rm || null}); },
+  rmode(el){ state.rmode = el.dataset.v; Rec.note = ""; render(); },
+  suggest(){ Rec.run("suggest"); },
+  "imp-text"(){ Rec.run("import"); },
+  "imp-photo"(){ const i = document.getElementById("rec-file"); if (i) i.click(); },
+  "open-rec"(el){ const r = Rec.find(el.dataset.id); if (!r) return; state.cur = clone(r); go("recipe"); },
+  "save-rec"(){ if (Rec.save(state.cur)) { toast("Saved"); render(); } },
+  "save-all"(){ const n = Rec.list.filter(r => Rec.save(r)).length; toast(n ? `Saved ${n} ${n === 1 ? "recipe" : "recipes"}` : "Already saved"); render(); },
+  "del-rec"(){ state.overlay = {type:"confirm", title:"Delete this recipe?", text:"It is removed from your saved recipes.", ok:"Delete", act:"del-rec-ok"}; render(); },
+  "del-rec-ok"(){ Rec.remove(state.cur.id); state.cur = null; go("recipes"); toast("Deleted"); },
+  "start-timer"(){ if (!state.cur.steps.length) return; Tm.start(clone(state.cur)); },
+  "tm-toggle"(){ const t = state.timer; t.running ? Tm.pause() : Tm.play(); },
+  "tm-next"(){ Tm.next(); },
+  "tm-prev"(){ Tm.prev(); },
+  "tm-reset"(){ Tm.start(state.timer.rec); },
+  "log-rec"(){ const rec = state.cur || (state.timer && state.timer.rec); const bb = state.params.id && getBean(state.params.id); if (!bb || !rec || (bb.mode || "pour") !== rec.mode) return; go("detail"); startLog(rec); },
+});
+
+function methodCard(b){
+  const m = Rec.method;
+  if (Rec.mnote && Rec.mfor === b.id && !Rec.mbusy && !(m && m.beanId === b.id)) return `<div class="hint" role="status">${esc(Rec.mnote)}</div>`;
+  if (!m || m.beanId !== b.id) return "";
+  return `<div class="mth"><h3>Best way to brew these</h3>${m.list.map((x, i) => `<div class="m"><b>${i + 1}. ${MODE_WORD[x.mode][2]}${x.mode === b.mode ? " (this shelf)" : ""}</b><button data-act="open-recipes" data-id="${esc(b.id)}" data-rm="${x.mode}">Recipes</button><span>${esc(x.why)}</span></div>`).join("")}
+    ${m.sources.length ? `<div class="hint">Drew on: ${esc(m.sources.map(x => x.title).join(", "))}</div>` : ""}
+    <div class="hint">${m.searched ? "From a web search. A guide, not a rule." : "Web search wasn't available, so this is general knowledge."}</div></div>`;
+}
+Object.assign(Rec, {
+  mbusy:false, mnote:"", mfor:null, method:null,
+  async askMethod(){
+    const b = getBean(state.params.id); if (!b || this.mbusy) return;
+    if (!(Cloud.user && Cloud.sb)) { this.mnote = "Sign in from Settings to use this."; this.mfor = b.id; render(); return; }
+    this.mbusy = true; this.mnote = ""; this.mfor = b.id; render();
+    const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 32000);
+    try {
+      const { data } = await Cloud.sb.auth.getSession(); const token = data && data.session ? data.session.access_token : null;
+      if (!token) throw {code:"unauthorized"};
+      const res = await fetch("/api/recipe", {method:"POST", signal:ctl.signal, headers:{"Content-Type":"application/json", Authorization:"Bearer " + token}, body:JSON.stringify({action:"method", bean:{name:b.name, brand:b.brand, origin:b.origin, flavour:b.flavour, roast:b.roast, process:b.process}})});
+      let out = {}; try { out = await res.json(); } catch {}
+      if (res.status === 404) throw {code:"not_configured"};
+      if (!res.ok) throw {code: out.error || "failed", status: out.status};
+      const list = (out.methods || []).filter(x => MODE_WORD[x.mode]);
+      if (list.length) this.method = {beanId:b.id, list, sources: out.sources || [], searched: !!out.searched}; else this.mnote = "Nothing came back. Try again.";
+    } catch (e) { this.mnote = scanError(e && e.name === "AbortError" ? {code:"timeout"} : e).replace("scan service", "recipe service").replace(/photos?/, "input"); }
+    clearTimeout(timer); this.mbusy = false; if (state.screen === "detail" && state.params.id === b.id) { const y = scrollY; render(); scrollTo(0, y); }
+  },
+});
+Object.assign(actions, { "which-method"(){ Rec.askMethod(); } });
 
 /* ================= saving files outside Claude ================= */
 async function getSaver(){
@@ -1074,7 +1370,7 @@ async function drawCard(b){
   [[tx, ty+bh, tx+tw, ty+bh], [tx, ty+bh+rh, tx+tw, ty+bh+rh], [tx, ty+bh+rh*2, tx+tw, ty+bh+rh*2], [tx+tw/2, ty+bh, tx+tw/2, ty+bh+rh*2]]
     .forEach(([a, c, d, e]) => { ctx.beginPath(); ctx.moveTo(a, c); ctx.lineTo(d, e); ctx.stroke(); });
   ctx.fillStyle = t.bi; ctx.font = '700 30px "Instrument Sans", sans-serif'; ctx.textAlign = "left";
-  ctx.fillText(b.mode === "espresso" ? "SHOTS LOGGED" : "POURS LOGGED", tx + 26, ty + bh/2);
+  ctx.fillText(b.mode === "espresso" ? "SHOTS LOGGED" : b.mode === "aeropress" ? "BREWS LOGGED" : "POURS LOGGED", tx + 26, ty + bh/2);
   ctx.textAlign = "right"; ctx.fillText(String((b.logs||[]).length), tx + tw - 26, ty + bh/2);
   ctx.textAlign = "center"; ctx.fillStyle = t.ink; ctx.font = '500 26px "IBM Plex Mono", monospace';
   const cells = [b.roast ? (b.roast + " roast").toUpperCase() : "—", (b.process || "—").toUpperCase(), fmtDot(b.roastDate) || "—", b.grams ? b.grams + " G" : "—"];
@@ -1109,7 +1405,7 @@ document.addEventListener("keydown", e => {
   if ((e.key === "Enter" || e.key === " ") && e.target.matches('[role="button"][data-act]')) { e.preventDefault(); e.target.click(); }
   if (e.key === "Escape" && state.overlay) { state.overlay = null; render(); }
 });
-const NUMERIC = new Set(["grams","dose","water","yield","time","temp","ice"]);
+const NUMERIC = new Set(["grams","dose","water","yield","time","temp","ice","steep","press","topup"]);
 document.addEventListener("input", e => {
   const el = e.target;
   if (el.dataset.color && state.draft) {
@@ -1117,10 +1413,11 @@ document.addEventListener("input", e => {
       const sw = document.querySelector('[data-v="custom"] .sw'); if (sw) { const c = state.draft.custom; sw.style.background = c.paper; sw.style.setProperty("--swi", inkFor(c.paper)); sw.children[0].style.background = c.label; sw.children[1].style.background = c.band; } }
     return;
   }
+  if (el.dataset.r) { Rec.imp[el.dataset.r] = el.value; return; }
   const k = el.dataset.f; if (!k) return;
   const target = state.screen === "log-form" ? state.logDraft : state.draft; if (!target) return;
   let v = el.value;
-  if (NUMERIC.has(k)) { v = k === "grams" || k === "time" ? v.replace(/\D/g, "").slice(0, k === "time" ? 3 : L.grams) : cleanNum(v, L.num); if (v !== el.value) el.value = v; }
+  if (NUMERIC.has(k)) { v = k === "grams" || k === "time" || k === "steep" || k === "press" ? v.replace(/\D/g, "").slice(0, k === "grams" ? L.grams : 3) : cleanNum(v, L.num); if (v !== el.value) el.value = v; }
   target[k] = v;
   const cnt = document.querySelector(`[data-cnt="${k}"]`);
   if (cnt) { const max = +el.getAttribute("maxlength") || L[k]; cnt.textContent = `${v.length}/${max}`; cnt.classList.toggle("full", v.length >= max); }
@@ -1133,6 +1430,7 @@ document.addEventListener("change", e => {
     const m = +document.getElementById("f-min").value, s = +document.getElementById("f-sec").value;
     state.logDraft.time = m * 60 + s; return;
   }
+  if (el.id === "rec-file" && el.files && el.files[0]) { const fl = [...el.files]; el.value = ""; Rec.run("import", fl); return; }
   if (el.id === "scan-file" && el.files && el.files[0]) { const fl = [...el.files]; el.value = ""; Scan.run(fl); return; }
   if (el.id === "import-file" && el.files && el.files[0]) {
     const f = el.files[0], r = new FileReader();
@@ -1141,6 +1439,8 @@ document.addEventListener("change", e => {
         const data = JSON.parse(r.result); if (!data || !Array.isArray(data.beans)) throw 0;
         let n = 0;
         data.beans.forEach(b => { if (b && typeof b === "object" && b.id && typeof b.name === "string") { Store.saveBean(b); n++; } });
+        const rs = data.settings && Array.isArray(data.settings.recipes) ? data.settings.recipes : [];
+        if (rs.length) { const have = new Set(Rec.saved().map(x => x.id)); const add = rs.filter(x => x && x.id && !have.has(x.id) && Array.isArray(x.steps)); if (add.length) { state.settings.recipes = Rec.saved().concat(add).slice(0, 60); Store.saveSettings(); } }
         render(); toast(n ? `Imported ${n} ${n === 1 ? "bag" : "bags"}` : "No bags found in that file");
       } catch { toast("That file isn't a Dial-In backup."); }
     };
